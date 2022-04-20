@@ -1,12 +1,6 @@
 -- Aeon ArchivesSpace Import
 -- This addon will utilize the ArchivesSpace API to look up the collection/item information matching a request in Aeon.
--- The addon will match Aeon ItemNumber with ArchivesSpace barcode. When a match is found, the addon will import the 
--- Top Container <title> to the Aeon Location field. When a successful match is found and the data is imported, the 
--- request will be routed to Awaiting Request Processing (or equivalent). If the match fails or there is another error, 
--- the request will be routed to a custom error queue to notify staff that they will need to manually update the request.
-
--- This addon requires that a read-only user be created for Aeon to use to access the staff API in ArchivesSpace. 
--- Allowance for the Aeon server may also be required if the ArchivesSpace API is IP restricted.
+-- Please see README for workflow and configuration explanation.
 
 luanet.load_assembly("System");
 luanet.load_assembly("log4net");
