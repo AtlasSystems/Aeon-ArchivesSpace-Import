@@ -1,7 +1,7 @@
 # Aeon ArchivesSpace Import Addon
 
 ## Version
-- 1.0.0
+- 1.0.1
 
 ## Workflow
 
@@ -25,32 +25,35 @@ This addon requires two Lua libraries that are included in the distribution.
 ## Addon Settings
 
 ### **RequestMonitorQueue (string)**
-The queue that the addon monitors for transactions that need ArchivesSpace data imported. Required.
+The queue that the addon will monitor for transactions that need ArchivesSpace data automatically imported. Required. Default: ArchivesSpace Data Import
 
 ### **SuccessRouteQueue (string)**
-The queue that the addon will route requests to after successfully importing data from ArchivesSpace. Required.
+The queue that the addon will route requests to after successfully importing data from ArchivesSpace. Required. Default: New Request
 
 ### **ErrorRouteQueue (string)**
-The queue that the addon will route 
+The queue that the addon will route requests to if erros are encountered while importing data from ArchivesSpace. Required. Default: ArchivesSpace Data Needed
 
 ### **ArchivesSpaceApiUrl (string)**
-URL of the ArchivesSpace API (requires port 8089).
+URL of the ArchivesSpace API. Required.
 
 ### **ArchivesSpaceUsername (string)**
-Staff username for Aeon user to access API.
+Staff username for Aeon user to access API. Required.
 
 ### **ArchivesSpacePassword (string)**
-Staff password for Aeon user to access API.
+Staff password for Aeon user to access API. Required.
 
 ### **TopContainerUriField (string)**
-Specifies the custom transaction field that contains the ArchivesSpace record's top container URI. Leave blank to search for the record by repo ID and barcode. If used the value of this setting must match the name of a column from the Transactions custom fields table.
+Specifies the custom transaction field that contains the ArchivesSpace record's top container URI. Leave blank to search for the record by repo ID and barcode. If used the value of this setting must match the name of a column from the Transactions custom fields table. Default: TopContainerID
 
 ### **RepoCodeField (string)**
-Specifies the Aeon field that contains the ArchivesSpace repo_code. Leave blank to use TopContainerUriField or RepoIdMapping. Must be a tag. Ex: {TableField:Transactions.ItemInfo1}
+Specifies the Aeon field that contains the ArchivesSpace repo_code. Leave blank to use TopContainerUriField or RepoIdMapping. Must be a tag. Ex: {TableField:Transaction.ItemInfo1}
 
 ### **RepoIdMapping (string)**
 A comma-separated list of repo IDs and corresponding Aeon site codes. Leave blank to use TopContainerUriField or RepoCodeField. Ex: 123=SITE1,456=SITE2,789=SITE3 
 Repo IDs can be found as part of the URL when browsing repositories or collections in ArchivesSpace. The ID will be the number following "repositories/" in the URL. For example, in https://yourarchivesspace.com//repositories/3/resources/1, the Repo ID is 3.
 
+### **BarcodeField (string)**
+Specifies the Aeon field that contains the ArchivesSpace barcode. Required when using RepoCodeField or RepoIdMapping. Must be a tag. Ex: {TableField:Transaction.ItemInfo2}
+
 ### **LocationDestinationField (string)**
-Specifies the transaction field where the location information for the transaction should be stored. The value of this setting must match the name of a column from the Transactions table.
+Specifies the transaction field where the location information for the transaction should be stored. The value of this setting must match the name of a column from the Transactions table. Default: Location
