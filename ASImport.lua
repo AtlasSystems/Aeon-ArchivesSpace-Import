@@ -62,17 +62,16 @@ function ImportASpaceInfo()
         
         local success, location = pcall(ImportByTopContainerUri, topContainerUri);
         if success and NotNilOrBlank(location) then
-            SetLocationAndRoute(location);
+            SetLocationAndRoute(location, transactionNumber);
         else
-            OnError(location);
-            ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
+            HandleLocationError(location, transactionNumber, barcode);
         end
 
     elseif Settings.RepoCodeField ~= "" then
         local repoCode = TagProcessor.ReplaceTags(Settings.RepoCodeField);
         
         if repoCode == "" then
-            log:Info("repo_code is missing from " .. Settings.RepoCodeField .. " for Transaction " .. transactionNumber);
+            log:Info("repo_code is missing from " .. Settings.RepoCodeField:match("%.(.+)}") .. " for Transaction " .. transactionNumber);
             return;
         end
 
@@ -80,14 +79,18 @@ function ImportASpaceInfo()
         if success and NotNilOrBlank(repoId) then
             local success, location = pcall(ImportByRepoIdAndBarcode, repoId, barcode);
             if success and NotNilOrBlank(location) then
-                SetLocationAndRoute(location);
+                SetLocationAndRoute(location, transactionNumber);
             else
-                OnError(location);
-                ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
+                HandleLocationError(location, transactionNumber, barcode);
             end
 
         else
-            OnError(repoId);
+            if not NotNilOrBlank(repoId) then
+                log:Info("Repo ID not found for Transaction " .. transactionNumber .. " with repo_code " .. repoCode);
+            else
+                OnError(repoId);
+            end
+            
             ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
         end
 
@@ -108,10 +111,9 @@ function ImportASpaceInfo()
         
         local success, location = pcall(ImportByRepoIdAndBarcode, repoId, barcode);
         if success and NotNilOrBlank(location) then
-            SetLocationAndRoute(location);
+            SetLocationAndRoute(location, transactionNumber);
         else
-            OnError(location);
-            ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
+            HandleLocationError(location, transactionNumber, barcode);
         end
     else
         log:Info("Invalid configuration. TopContainerUri, RepoCodeField, or RepoIdMapping must contain a value.");
@@ -139,7 +141,7 @@ end
 function ImportByRepoIdAndBarcode(repoId, barcode)
     log:Debug("Retrieving ASpace info for barcode " .. barcode);
 
-    local apiPath = "/repositories/" .. repoId .. "/search?q=" .. barcode .. "&fields[]=json&page=1";
+    local apiPath = "/repositories/" .. repoId .. "/top_containers/search?q=" .. barcode .. "&fields[]=json&page=1";
     local response = SendApiRequest(apiPath, "GET", nil, sessionId);
     log:Debug("API Request completed");
     
@@ -149,7 +151,7 @@ function ImportByRepoIdAndBarcode(repoId, barcode)
     if NotNilOrBlank(location) then
         log:Debug("Location: " .. location);
     else
-        log:Debug("No location found for barcode " .. barcode .. "in repo " .. repoId);
+        log:Debug("No location found for barcode " .. barcode .. " in repo " .. repoId);
     end
 
     return location;
@@ -182,8 +184,10 @@ function GetRepoId(repoCode)
 end
 
 function GetCurrentContainerLocation(parsedResponse)
-    -- The response from the /repositories/[repoId]/search endpoint has the JSON we need in a "json" field as plaintext with escaped quotes.
-    local containerLocations = parsedResponse.container_locations or JsonParser:ParseJSON(parsedResponse["results"][1]["json"]:gsub("\\", "")).container_locations;
+    -- The response from the /repositories/[repoId]/top_containers endpoint has the JSON we need in a "json" field
+    log:Debug("Response first JSON field: " .. tostring(parsedResponse["response"]["docs"][1]["json"]));
+
+    local containerLocations = parsedResponse.container_locations or JsonParser:ParseJSON(parsedResponse["response"]["docs"][1]["json"]).container_locations;
     local currentContainerLocationTitle;
     for i = 1, #containerLocations do
         if containerLocations[i].status == "current" then
@@ -195,10 +199,10 @@ function GetCurrentContainerLocation(parsedResponse)
     return currentContainerLocationTitle;
 end
 
-function SetLocationAndRoute(location)
+function SetLocationAndRoute(location, transactionNumber)
     SetFieldValue("Transaction" , Settings.LocationDestinationField, location);
     SaveDataSource("Transaction");
-    ExecuteCommand("Route", {GetFieldValue("Transaction", "TransactionNumber"), Settings.SuccessRouteQueue});
+    ExecuteCommand("Route", {transactionNumber, Settings.SuccessRouteQueue});
 end
 
 function GetAuthenticationToken()
@@ -254,6 +258,16 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
         OnError(result);
         return "";
     end
+end
+
+function HandleLocationError(location, transactionNumber, barcode);
+    if not NotNilOrBlank(location) then
+        log:Info("No location found for Transaction " .. transactionNumber .. " with barcode " .. barcode);
+    else
+        OnError(location);
+    end
+
+    ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
 end
 
 function ObjectToString(o)
