@@ -5,12 +5,7 @@
 
 ## Workflow
 
-For each request in the queue defined by *RequestMonitorQueue*, the server addon will use the ArchivesSpace API to import the \_resolved.title of the first current container_location retrieved to the Aeon field defined by *LocationDestinationField* and the request will be routed to *SuccessRouteQueue*. The method used to do this depends on the addon's configuration. If *TopContainerUriField* is not blank, the API's top containers endpoint is used. If *RepoCodeField* is not blank, the Aeon field defined by *RepoCodeField* is used to first get a list of ArchivesSpace repos by repo_code. The repo ID is then retrieved from the repo with a matching repo_code, and the repo ID and barcode in the Aeon field defined by *BarcodeField* are used with the ArchivesSpace repositories/search endpoint. If *RepoIdMapping* is not blank, the mapping is first resolved and the repo ID selected based on the Aeon Site field. The repo ID and barcode defined by *BarcodeField* are then used with the ArchivesSpace repositories/search endpoint. If more than one of these settings contains a value, *TopContainerUriField* is prioritized, followed by *RepoCodeField*, and finally *RepoCodeMapping*. Requests will be routed to the *ErrorRouteQueue* in the following cases:
-* *TopContainerUri*, *RepoCodeField*, and *RepoCodeMapping* are all blank
-* (if using *TopContainerUri*) The top container URI is not present in the field defined by *TopContainerUriField* of the request
-* (if using *RepoCodeField*) The ArchivesSpace repo_code is not present in the field defined by *RepoCodeField* of the request
-* (if using *RepoIdMapping*) None of the Aeon Site codes match the Site code of the request
-* (if using *RepoCodeField* or *RepoIdMapping*) The barcode is not present in the Aeon field defined by *BarcodeField*
+For each request in the queue defined by *RequestMonitorQueue*, the server addon will use the ArchivesSpace API top_containers endpoint to import the \_resolved.title of the first current container_location retrieved to the Aeon field defined by *LocationDestinationField* and the request will be routed to *SuccessRouteQueue*. The method used to do this depends on the addon's configuration. If *TopContainerUriField* is not blank, the addon can retrieve the location with that field alone. If *RepoCodeField* is not blank, the Aeon field defined by *RepoCodeField* is used to first get a list of ArchivesSpace repos by repo_code. The repo ID is then retrieved from the repo with a matching repo_code, and the repo ID and barcode in the Aeon field defined by *BarcodeField* are used to retrieve the location. If *RepoIdMapping* is not blank, the mapping is first resolved and the repo ID selected based on the Aeon Site field. The repo ID and barcode defined by *BarcodeField* are then used to retrieve the location. If more than one of these settings contains a value, *TopContainerUriField* is prioritized, followed by *RepoCodeField*, and finally *RepoCodeMapping*. Requests will be routed to the *ErrorRouteQueue* in the following cases:
 * The addon fails to connect to the ArchivesSpace API
 * The ArchivesSpace API request is invalid
 * The ARchivesSpace API request returns a Not Found (404)
@@ -50,7 +45,16 @@ Specifies the Aeon field that contains the ArchivesSpace repo_code. Leave blank 
 
 ### **RepoIdMapping (string)**
 A comma-separated list of repo IDs and corresponding Aeon site codes. Leave blank to use TopContainerUriField or RepoCodeField. Ex: 123=SITE1,456=SITE2,789=SITE3 
-Repo IDs can be found as part of the URL when browsing repositories or collections in ArchivesSpace. The ID will be the number following "repositories/" in the URL. For example, in https://yourarchivesspace.com//repositories/3/resources/1, the Repo ID is 3.
+Repo IDs can be found as part of the URL when browsing repositories or collections in ArchivesSpace. The ID will be the number following "repositories/" in the URL. For example, in https://yourarchivesspace.com//repositories/3/resources/1, the Repo ID is 3. If our URLs do not follow this format, you can log into the ArchivesSpace staff interface and view the source of any page with a "Select Repository" dropdown. Search for a select input with the ID "id."
+
+```
+<select name="id" id="id" class="form-control"><option selected="selected" value="2">CAT</option>
+    <option value="3">Special Collections</option>
+    <option value="4">SANDBOX</option>
+    <option value="5">The Vault</option>
+</select>
+```
+The option values are the repo IDs.
 
 ### **BarcodeField (string)**
 Specifies the Aeon field that contains the ArchivesSpace barcode. Required when using RepoCodeField or RepoIdMapping. Must be a tag. Ex: {TableField:Transaction.ItemInfo2}
