@@ -27,7 +27,6 @@ Settings.LocationDestinationField = GetSetting("LocationDestinationField");
 
 local rootLogger = "AtlasSystems.Addons.Aeon-ArchivesSpace-Import";
 local log = Types["log4net.LogManager"].GetLogger(rootLogger);
-local webClient = Types["System.Net.WebClient"]();
 local sessionId;
 local sessionTimeStamp;
 
@@ -235,6 +234,7 @@ function GetSessionId()
 end
 
 function SendApiRequest(apiPath, method, parameters, sessionId)
+    local webClient = Types["System.Net.WebClient"]();
 
     webClient.Headers:Clear();
     if (sessionId ~= nil and sessionId ~= "") then
@@ -248,6 +248,8 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
     else
         success, result = pcall(WebClientGet, webClient, apiPath);
     end
+
+    webClient:Dispose();
 
     if (success) then
         log:Debug("API call successful");
