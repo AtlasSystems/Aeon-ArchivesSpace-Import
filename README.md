@@ -1,6 +1,8 @@
 # Aeon ArchivesSpace Import Addon
 
 ## Version
+- 1.0.3:
+    - Fixed an issue where the addon would not properly dispose of the WebClients used for API calls, which could potentially lead to memory leak issues.
 - 1.0.1
 
 ## Workflow
