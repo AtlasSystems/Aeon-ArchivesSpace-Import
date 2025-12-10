@@ -2,15 +2,12 @@
 -- This addon will utilize the ArchivesSpace API to look up the collection/item information matching a request in Aeon.
 -- Please see README for workflow and configuration explanation.
 
-luanet.load_assembly("System");
-luanet.load_assembly("log4net");
+import("System");
+import("log4net");
 require("JsonParser");
 require("AtlasHelpers");
 
-local Types = {};
-Types["System.Net.WebClient"] = luanet.import_type("System.Net.WebClient");
-Types["System.Text.Encoding"] = luanet.import_type("System.Text.Encoding");
-Types["log4net.LogManager"] = luanet.import_type("log4net.LogManager");
+
 
 local Settings = {};
 Settings.RequestMonitorQueue = GetSetting("RequestMonitorQueue");
@@ -26,7 +23,7 @@ Settings.BarcodeField = GetSetting("BarcodeField");
 Settings.LocationDestinationField = GetSetting("LocationDestinationField");
 
 local rootLogger = "AtlasSystems.Addons.Aeon-ArchivesSpace-Import";
-local log = Types["log4net.LogManager"].GetLogger(rootLogger);
+local log = LogManager.GetLogger(rootLogger);
 local sessionId;
 local sessionTimeStamp;
 
@@ -234,7 +231,7 @@ function GetSessionId()
 end
 
 function SendApiRequest(apiPath, method, parameters, sessionId)
-    local webClient = Types["System.Net.WebClient"]();
+    local webClient = WebClient();
 
     webClient.Headers:Clear();
     if (sessionId ~= nil and sessionId ~= "") then
