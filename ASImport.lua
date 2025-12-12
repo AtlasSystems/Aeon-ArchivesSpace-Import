@@ -27,7 +27,7 @@ local rootLogger = "AtlasSystems.Addons.Aeon-ArchivesSpace-Import";
 local log = LogManager.GetLogger(rootLogger);
 local sessionId;
 local sessionTimeStamp;
-local invalidFields = false;
+local invalidFieldSettings = false;
 
 function Init()
     RegisterSystemEventHandler("SystemTimerElapsed","InitiateASpaceImport");
@@ -89,7 +89,7 @@ end
 
 function ImportASpaceInfo()
     -- If a relevant field setting is invalid, we don't want to keep processing transactions.
-    if invalidFields then
+    if invalidFieldSettings then
         return;
     end
 
@@ -105,7 +105,7 @@ function ImportASpaceInfo()
     if NotNilOrBlank(Settings.RepoCodeField) or NotNilOrBlank(Settings.RepoIdMapping[1]) then
         local success, barcodeOrErr = pcall(TagProcessor.ReplaceTags, Settings.BarcodeField);
         if not success then
-            invalidFields = true;
+            invalidFieldSettings = true;
             log:Warn("The BarcodeField setting must be a valid Aeon field in the form of a tag.");
             return;
         else
@@ -116,7 +116,7 @@ function ImportASpaceInfo()
     if Settings.TopContainerUriField ~= "" then
         local topContainerUriSuccess, topContainerUri = pcall(GetFieldValue, "Transaction.CustomFields", Settings.TopContainerUriField);
         if not topContainerUriSuccess then
-            invalidFields = true;
+            invalidFieldSettings = true;
             log:Warn("The TopContainerUriField setting must be a valid Aeon custom field.");
             return;
         end
