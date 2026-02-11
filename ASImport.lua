@@ -3,6 +3,7 @@
 -- Please see README for workflow and configuration explanation.
 
 luanet.load_assembly("System");
+luanet.load_assembly("System.Xml");
 luanet.load_assembly("log4net");
 require("JsonParser");
 require("AtlasHelpers");
@@ -10,6 +11,7 @@ require("AtlasHelpers");
 local Types = {};
 Types["System.Net.WebClient"] = luanet.import_type("System.Net.WebClient");
 Types["System.Text.Encoding"] = luanet.import_type("System.Text.Encoding");
+Types["System.Xml.XmlDocument"] = luanet.import_type("System.Xml.XmlDocument");
 Types["log4net.LogManager"] = luanet.import_type("log4net.LogManager");
 
 local Settings = {};
@@ -25,7 +27,9 @@ Settings.RepoIdMapping = AtlasHelpers.StringSplit(",", GetSetting("RepoIdMapping
 Settings.BarcodeField = GetSetting("BarcodeField");
 Settings.LocationDestinationField = GetSetting("LocationDestinationField");
 
-local rootLogger = "AtlasSystems.Addons.Aeon-ArchivesSpace-Import";
+local addonName = "AeonASpaceImport";
+local addonVersion = GetAddonVersion();
+local rootLogger = "AtlasSystems.Addons." .. addonName;
 local log = Types["log4net.LogManager"].GetLogger(rootLogger);
 local sessionId;
 local sessionTimeStamp;
@@ -237,6 +241,7 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
     local webClient = Types["System.Net.WebClient"]();
 
     webClient.Headers:Clear();
+    webClient.Headers:Add("User-Agent", addonName .. "/" .. addonVersion);
     if (sessionId ~= nil and sessionId ~= "") then
         webClient.Headers:Add("X-ArchivesSpace-Session", sessionId);
     end
@@ -355,6 +360,22 @@ function TraverseError(e)
     else
         return e.Message;
     end
+end
+
+function GetAddonVersion()
+    local success, result = pcall(function()
+        local configDoc = Types["System.Xml.XmlDocument"]();
+        configDoc:Load("config.xml");
+        local versionNode = configDoc:SelectSingleNode("/Configuration/Version");
+        if versionNode then
+            return versionNode.InnerText;
+        end
+    end);
+
+    if success and result then
+        return result;
+    end
+    return "0.0.0";
 end
 
 function PathCombine(path1, path2)
