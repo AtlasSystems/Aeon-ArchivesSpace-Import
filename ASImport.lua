@@ -375,6 +375,11 @@ function GetAddonVersion()
     if success and result then
         return result;
     end
+
+    if not success then
+        log:Error("Failed to read addon version from config.xml: " .. tostring(result));
+    end
+
     return "0.0.0";
 end
 
