@@ -1,3 +1,5 @@
+local log = LogManager.GetLogger(rootLogger .. ".TagProcessor");
+
 local TagProcessorInternal = {};
 
 TagProcessor = TagProcessorInternal;

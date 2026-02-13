@@ -1,15 +1,13 @@
 -- Aeon ArchivesSpace Import
 -- This addon will utilize the ArchivesSpace API to look up the collection/item information matching a request in Aeon.
 -- Please see README for workflow and configuration explanation.
-
 import("System");
-luanet.load_assembly("System.Xml");
+import("System.Xml");
 import("System.Net");
+import("System.IO");
 import("log4net");
 require("JsonParser");
 require("AtlasHelpers");
-
-
 
 local Settings = {};
 Settings.RequestMonitorQueue = GetSetting("RequestMonitorQueue");
@@ -54,7 +52,7 @@ end
 
 function GetAddonVersion()
     local success, result = pcall(function()
-        local configDoc = Types["System.Xml.XmlDocument"]();
+        local configDoc = XmlDocument();
         configDoc:Load(AddonInfo.Directory .. "\\config.xml");
         local versionNode = configDoc:SelectSingleNode("/Configuration/Version");
         if versionNode then
@@ -81,6 +79,19 @@ end
 
 function InitiateASpaceImport()
     log:Debug("Initiate ArchivesSpace Import");
+    
+    
+    local barcode;
+    if NotNilOrBlank(Settings.RepoCodeField) or NotNilOrBlank(Settings.RepoIdMapping[1]) then
+        local success, barcodeOrErr = pcall(TagProcessor.ReplaceTags, Settings.BarcodeField);
+        if not success then
+            invalidFieldSettings = true;
+            log:Warn("The BarcodeField setting must be a valid Aeon field in the form of a tag.");
+            return;
+        else
+            barcode = barcodeOrErr;
+        end
+    end
 
     if not AreSettingsValid() then
         log:Warn("One or more settings are invalid. Addon will not run.");
@@ -239,6 +250,11 @@ function ImportByTopContainerUri(topContainerUri)
     local response = SendApiRequest(topContainerUri, "GET", nil, sessionId);
     log:Debug("API request completed");
 
+    if not NotNilOrBlank(response) then
+        log:Warn("Top container response is blank.");
+        return;
+    end
+
     local parsedResponse = JsonParser:ParseJSON(response);
     local location = GetCurrentContainerLocation(parsedResponse);
     if location ~= nil then
@@ -256,6 +272,11 @@ function ImportByRepoIdAndBarcode(repoId, barcode)
     local apiPath = "/repositories/" .. repoId .. "/top_containers/search?q=" .. barcode .. "&fields[]=json&page=1";
     local response = SendApiRequest(apiPath, "GET", nil, sessionId);
     log:Debug("API Request completed");
+
+    if not NotNilOrBlank(response) then
+        log:Warn("Repo ID/barcode response is blank.");
+        return;
+    end
     
     local parsedResponse = JsonParser:ParseJSON(response);
 
@@ -369,11 +390,11 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
 
     if (success) then
         log:Debug("API call successful");
-        log:Debug("Response: " .. result);
+        log:Debug("Response: " .. tostring(result));
         return result;
     else
         log:Debug("API call error");
-        OnError(result);
+        log:Error(GetWebExceptionMessage(result));
         return "";
     end
 end
@@ -470,4 +491,26 @@ function NotNilOrBlank(value)
     else
         return true;
     end
+end
+
+function GetWebExceptionMessage(exception)
+	local message = "";
+
+	if exception and exception.Message then
+		message = exception.Message;
+		if (exception.InnerException) then
+			message = message .. "\r\n" .. GetWebExceptionMessage(exception.InnerException);
+
+			if exception.InnerException.Response and exception.InnerException.Response ~= "Response" then
+				-- This is necessary to get the response body from exceptions thrown by WebClients.
+				local streamReader = StreamReader(exception.InnerException.Response:GetResponseStream());
+				local responseContent = streamReader:ReadToEnd();
+				log:Debug("Web exception response: \r\n" .. responseContent);
+			end
+		end
+	elseif exception then
+		message = exception;
+	end
+
+	return message;
 end

@@ -1,7 +1,7 @@
 <Configuration>
   <Name>Aeon ArchivesSpace Import</Name>
   <Author>Atlas Systems, Inc.</Author>
-  <Version>1.0.5</Version>
+  <Version>1.0.6</Version>
   <Active>true</Active>
   <Type>Server</Type>
   <Description>This addon imports data from the ArchivesSpace API that are in a specified data import queue. The transaction will be routed to one of 2 queues, depending on the success of the data import.</Description>
