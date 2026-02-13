@@ -3,6 +3,7 @@
 -- Please see README for workflow and configuration explanation.
 
 import("System");
+luanet.load_assembly("System.Xml");
 import("System.Net");
 import("log4net");
 require("JsonParser");
@@ -23,11 +24,56 @@ Settings.RepoIdMapping = AtlasHelpers.StringSplit(",", GetSetting("RepoIdMapping
 Settings.BarcodeField = GetSetting("BarcodeField");
 Settings.LocationDestinationField = GetSetting("LocationDestinationField");
 
-local rootLogger = "AtlasSystems.Addons.Aeon-ArchivesSpace-Import";
+local addonName = "AeonASpaceImport";
+local rootLogger = "AtlasSystems.Addons." .. addonName;
 local log = LogManager.GetLogger(rootLogger);
 local sessionId;
 local sessionTimeStamp;
 local invalidFieldSettings = false;
+
+function TraverseError(e)
+    if not e.GetType then
+        -- Not a .NET type
+        return nil;
+    else
+        if not e.Message then
+            -- Not a .NET exception
+            log:Debug(e:ToString());
+            return nil;
+        end
+    end
+
+    log:Debug(e.Message);
+
+    if e.InnerException then
+        return TraverseError(e.InnerException);
+    else
+        return e.Message;
+    end
+end
+
+function GetAddonVersion()
+    local success, result = pcall(function()
+        local configDoc = Types["System.Xml.XmlDocument"]();
+        configDoc:Load(AddonInfo.Directory .. "\\config.xml");
+        local versionNode = configDoc:SelectSingleNode("/Configuration/Version");
+        if versionNode then
+            return versionNode.InnerText;
+        end
+    end);
+
+    if success and result then
+        return result;
+    end
+
+    if not success then
+        log:Error("Failed to read addon version from config.xml: " .. TraverseError(result));
+    end
+
+    return "0.0.0";
+end
+
+local addonVersion = GetAddonVersion();
 
 function Init()
     RegisterSystemEventHandler("SystemTimerElapsed","InitiateASpaceImport");
@@ -306,6 +352,7 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
     local webClient = WebClient();
 
     webClient.Headers:Clear();
+    webClient.Headers:Add("User-Agent", addonName .. "/" .. addonVersion);
     if (sessionId ~= nil and sessionId ~= "") then
         webClient.Headers:Add("X-ArchivesSpace-Session", sessionId);
     end
@@ -403,24 +450,6 @@ function OnError(e)
     end
 
     log:Error("An error occurred while processing the ArchivesSpace API request:\r\n" .. message);
-end
-
-function TraverseError(e)
-    if not e.GetType then
-        -- Not a .NET type
-        return tostring(e);
-    else
-        if not e.Message then
-            -- Not a .NET exception
-            return tostring(e);
-        end
-    end
-
-    if e.InnerException then
-        return TraverseError(e.InnerException);
-    else
-        return e.Message;
-    end
 end
 
 function PathCombine(path1, path2)
