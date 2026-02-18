@@ -1,5 +1,4 @@
-local log = Types["log4net.LogManager"].GetLogger(rootLogger .. ".TagProcessor");
-Types["System.DBNull"] = luanet.import_type("System.DBNull");
+local log = LogManager.GetLogger(rootLogger .. ".TagProcessor");
 
 local TagProcessorInternal = {};
 
@@ -31,7 +30,7 @@ local function MapCustomFieldValue(fieldDefinition)
 		end
 
 		log:DebugFormat("Custom replacement value: {0}", value);
-		if ((value == nil) or (value == Types["System.DBNull"].Value)) then
+		if ((value == nil) or (value == DBNull.Value)) then
 			log:Debug("Replacement value is null.");				
 			value = TagProcessorInternal.NullValueReplacement;
 		end
@@ -86,7 +85,7 @@ local function MapFieldValue(fieldDefinition)
 				value = GetFieldValue(table, field);
 			end
 
-			if ((value == nil) or (value == Types["System.DBNull"].Value)) then
+			if ((value == nil) or (value == DBNull.Value)) then
 				log:Debug("[TagProcessor] Replacement value is null.");
 				value = "";
 			end
@@ -131,7 +130,7 @@ local function ReplaceTag(input)
 	elseif (tag:sub(1,5):lower() == "date:") then
 		local formatting = tag:sub(6);
 		log:Debug("[TagProcessor] Getting TableField. Date: " .. formatting);		
-		datetime = Types["DateTime"].Now;
+		datetime = DateTime.Now;
 		returnValue = datetime:ToString(formatting);
     else
         return '';

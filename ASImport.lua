@@ -1,18 +1,13 @@
 -- Aeon ArchivesSpace Import
 -- This addon will utilize the ArchivesSpace API to look up the collection/item information matching a request in Aeon.
 -- Please see README for workflow and configuration explanation.
-
-luanet.load_assembly("System");
-luanet.load_assembly("System.Xml");
-luanet.load_assembly("log4net");
+import("System");
+import("System.Xml");
+import("System.Net");
+import("System.IO");
+import("log4net");
 require("JsonParser");
 require("AtlasHelpers");
-
-local Types = {};
-Types["System.Net.WebClient"] = luanet.import_type("System.Net.WebClient");
-Types["System.Text.Encoding"] = luanet.import_type("System.Text.Encoding");
-Types["System.Xml.XmlDocument"] = luanet.import_type("System.Xml.XmlDocument");
-Types["log4net.LogManager"] = luanet.import_type("log4net.LogManager");
 
 local Settings = {};
 Settings.RequestMonitorQueue = GetSetting("RequestMonitorQueue");
@@ -29,9 +24,10 @@ Settings.LocationDestinationField = GetSetting("LocationDestinationField");
 
 local addonName = "AeonASpaceImport";
 local rootLogger = "AtlasSystems.Addons." .. addonName;
-local log = Types["log4net.LogManager"].GetLogger(rootLogger);
+local log = LogManager.GetLogger(rootLogger);
 local sessionId;
 local sessionTimeStamp;
+local invalidFieldSettings = false;
 
 function TraverseError(e)
     if not e.GetType then
@@ -56,7 +52,7 @@ end
 
 function GetAddonVersion()
     local success, result = pcall(function()
-        local configDoc = Types["System.Xml.XmlDocument"]();
+        local configDoc = XmlDocument();
         configDoc:Load(AddonInfo.Directory .. "\\config.xml");
         local versionNode = configDoc:SelectSingleNode("/Configuration/Version");
         if versionNode then
@@ -83,11 +79,77 @@ end
 
 function InitiateASpaceImport()
     log:Debug("Initiate ArchivesSpace Import");
+    
+    
+    local barcode;
+    if NotNilOrBlank(Settings.RepoCodeField) or NotNilOrBlank(Settings.RepoIdMapping[1]) then
+        local success, barcodeOrErr = pcall(TagProcessor.ReplaceTags, Settings.BarcodeField);
+        if not success then
+            invalidFieldSettings = true;
+            log:Warn("The BarcodeField setting must be a valid Aeon field in the form of a tag.");
+            return;
+        else
+            barcode = barcodeOrErr;
+        end
+    end
+
+    if not AreSettingsValid() then
+        log:Warn("One or more settings are invalid. Addon will not run.");
+        return;
+    end
 
     ProcessDataContexts("transactionstatus", Settings.RequestMonitorQueue, "ImportASpaceInfo");
 end
 
+function AreSettingsValid()
+    local function IsTag(value)
+        if value:find("{%w+:%w+%.%w+}") then
+            return true;
+        else
+            return false;
+        end
+    end
+
+    local settingsValid = true;
+
+    if not NotNilOrBlank(Settings.ApiBaseURL) then
+        log:Warn("The ArchivesSpaceApiUrl setting cannot be blank.");
+        settingsValid = false;
+    end
+    if not NotNilOrBlank(Settings.ArchivesSpaceUsername) then
+        log:Warn("The ArchivesSpaceUsername setting cannot be blank.");
+        settingsValid = false;
+    end
+    if not NotNilOrBlank(Settings.ArchivesSpacePassword) then
+        log:Warn("The ArchivesSpacePassword setting cannot be blank.");
+        settingsValid = false;
+    end
+    if not NotNilOrBlank(Settings.TopContainerUriField) and not NotNilOrBlank(Settings.RepoCodeField) and not NotNilOrBlank(Settings.RepoIdMapping[1]) then
+        log:Warn("One of the following settings must have a value: TopContainerUriField, RepoCodeField, or RepoIdMapping.");
+        settingsValid = false;
+    end
+    if (NotNilOrBlank(Settings.RepoCodeField) or NotNilOrBlank(Settings.RepoIdMapping[1])) and not NotNilOrBlank(Settings.BarcodeField) then
+        log:Warn("The BarcodeField setting cannot be blank when using RepoCodeField or RepoIdMapping.");
+        settingsValid = false;
+    end
+    if NotNilOrBlank(Settings.RepoCodeField) and not IsTag(Settings.RepoCodeField) then
+        log:Warn("The RepoCodeField setting must be a tag.");
+        settingsValid = false;
+    end
+    if NotNilOrBlank(Settings.BarcodeField) and not IsTag(Settings.BarcodeField) then
+        log:Warn("The BarcodeField must be a tag.");
+        settingsValid = false;
+    end
+
+    return settingsValid;
+end
+
 function ImportASpaceInfo()
+    -- If a relevant field setting is invalid, we don't want to keep processing transactions.
+    if invalidFieldSettings then
+        return;
+    end
+
     sessionId = GetSessionId();
     local transactionNumber = GetFieldValue("Transaction", "TransactionNumber");
 
@@ -96,21 +158,36 @@ function ImportASpaceInfo()
         return;
     end
 
-    local barcode = TagProcessor.ReplaceTags(Settings.BarcodeField);
+    local barcode;
+    if NotNilOrBlank(Settings.RepoCodeField) or NotNilOrBlank(Settings.RepoIdMapping[1]) then
+        local success, barcodeOrErr = pcall(TagProcessor.ReplaceTags, Settings.BarcodeField);
+        if not success then
+            invalidFieldSettings = true;
+            log:Warn("The BarcodeField setting must be a valid Aeon field in the form of a tag.");
+            return;
+        else
+            barcode = barcodeOrErr;
+        end
+    end
 
     if Settings.TopContainerUriField ~= "" then
-        if GetFieldValue("Transaction.CustomFields", Settings.TopContainerUriField) == "" then
-            log:Info("Top container URI is missing from " .. Settings.TopContainerUriField .. " for Transaction " .. transactionNumber);
+        local topContainerUriSuccess, topContainerUri = pcall(GetFieldValue, "Transaction.CustomFields", Settings.TopContainerUriField);
+        if not topContainerUriSuccess then
+            invalidFieldSettings = true;
+            log:Warn("The TopContainerUriField setting must be a valid Aeon custom field.");
             return;
         end
 
-        local topContainerUri = GetFieldValue("Transaction.CustomFields", Settings.TopContainerUriField) .. "?resolve%5B%5D=container_locations";
+        if not NotNilOrBlank(topContainerUri) then
+            log:Info("Top container URI is missing from " .. Settings.TopContainerUriField .. " for Transaction " .. transactionNumber);
+            return;
+        end
         
-        local success, location = pcall(ImportByTopContainerUri, topContainerUri);
-        if success and NotNilOrBlank(location) then
+        local importSuccess, location = pcall(ImportByTopContainerUri, topContainerUri .. "?resolve%5B%5D=container_locations");
+        if importSuccess and NotNilOrBlank(location) then
             SetLocationAndRoute(location, transactionNumber);
         else
-            HandleLocationError(location, transactionNumber, barcode);
+            HandleLocationError(location, transactionNumber, "top container URI", topContainerUri);
         end
 
     elseif Settings.RepoCodeField ~= "" then
@@ -127,7 +204,7 @@ function ImportASpaceInfo()
             if success and NotNilOrBlank(location) then
                 SetLocationAndRoute(location, transactionNumber);
             else
-                HandleLocationError(location, transactionNumber, barcode);
+                HandleLocationError(location, transactionNumber, "barcode", barcode);
             end
 
         else
@@ -140,7 +217,7 @@ function ImportASpaceInfo()
             ExecuteCommand("Route", {transactionNumber, Settings.ErrorRouteQueue});
         end
 
-    elseif #Settings.RepoIdMapping > 0 then
+    elseif NotNilOrBlank(Settings.RepoIdMapping[1]) then
         local siteCode = GetFieldValue("Transaction", "Site");
         local repoId = nil;
         for i = 1, #Settings.RepoIdMapping do
@@ -159,7 +236,7 @@ function ImportASpaceInfo()
         if success and NotNilOrBlank(location) then
             SetLocationAndRoute(location, transactionNumber);
         else
-            HandleLocationError(location, transactionNumber, barcode);
+            HandleLocationError(location, transactionNumber, "barcode", barcode);
         end
     else
         log:Info("Invalid configuration. TopContainerUri, RepoCodeField, or RepoIdMapping must contain a value.");
@@ -172,6 +249,11 @@ function ImportByTopContainerUri(topContainerUri)
     log:Debug("Retrieving ASpace info for top level container " .. topContainerUri);
     local response = SendApiRequest(topContainerUri, "GET", nil, sessionId);
     log:Debug("API request completed");
+
+    if not NotNilOrBlank(response) then
+        log:Warn("Top container response is blank.");
+        return;
+    end
 
     local parsedResponse = JsonParser:ParseJSON(response);
     local location = GetCurrentContainerLocation(parsedResponse);
@@ -190,6 +272,11 @@ function ImportByRepoIdAndBarcode(repoId, barcode)
     local apiPath = "/repositories/" .. repoId .. "/top_containers/search?q=" .. barcode .. "&fields[]=json&page=1";
     local response = SendApiRequest(apiPath, "GET", nil, sessionId);
     log:Debug("API Request completed");
+
+    if not NotNilOrBlank(response) then
+        log:Warn("Repo ID/barcode response is blank.");
+        return;
+    end
     
     local parsedResponse = JsonParser:ParseJSON(response);
 
@@ -231,7 +318,9 @@ end
 
 function GetCurrentContainerLocation(parsedResponse)
     -- The response from the /repositories/[repoId]/top_containers endpoint has the JSON we need in a "json" field
-    log:Debug("Response first JSON field: " .. tostring(parsedResponse["response"]["docs"][1]["json"]));
+    if parsedResponse["response"] then
+        log:Debug("Response first JSON field: " .. tostring(parsedResponse["response"]["docs"][1]["json"]));
+    end    
 
     local containerLocations = parsedResponse.container_locations or JsonParser:ParseJSON(parsedResponse["response"]["docs"][1]["json"]).container_locations;
     local currentContainerLocationTitle;
@@ -281,7 +370,7 @@ function GetSessionId()
 end
 
 function SendApiRequest(apiPath, method, parameters, sessionId)
-    local webClient = Types["System.Net.WebClient"]();
+    local webClient = WebClient();
 
     webClient.Headers:Clear();
     webClient.Headers:Add("User-Agent", addonName .. "/" .. addonVersion);
@@ -301,18 +390,18 @@ function SendApiRequest(apiPath, method, parameters, sessionId)
 
     if (success) then
         log:Debug("API call successful");
-        log:Debug("Response: " .. result);
+        log:Debug("Response: " .. tostring(result));
         return result;
     else
         log:Debug("API call error");
-        OnError(result);
+        log:Error(GetWebExceptionMessage(result));
         return "";
     end
 end
 
-function HandleLocationError(location, transactionNumber, barcode);
+function HandleLocationError(location, transactionNumber, fieldType, fieldValue);
     if not NotNilOrBlank(location) then
-        log:Info("No location found for Transaction " .. transactionNumber .. " with barcode " .. barcode);
+        log:Info("No location found for Transaction " .. transactionNumber .. " with " .. fieldType .. " " .. fieldValue);
     else
         OnError(location);
     end
@@ -402,4 +491,26 @@ function NotNilOrBlank(value)
     else
         return true;
     end
+end
+
+function GetWebExceptionMessage(exception)
+	local message = "";
+
+	if exception and exception.Message then
+		message = exception.Message;
+		if (exception.InnerException) then
+			message = message .. "\r\n" .. GetWebExceptionMessage(exception.InnerException);
+
+			if exception.InnerException.Response and exception.InnerException.Response ~= "Response" then
+				-- This is necessary to get the response body from exceptions thrown by WebClients.
+				local streamReader = StreamReader(exception.InnerException.Response:GetResponseStream());
+				local responseContent = streamReader:ReadToEnd();
+				log:Debug("Web exception response: \r\n" .. responseContent);
+			end
+		end
+	elseif exception then
+		message = exception;
+	end
+
+	return message;
 end
